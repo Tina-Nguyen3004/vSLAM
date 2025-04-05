@@ -36,6 +36,31 @@ def extract_intrinsic_parameters(file_calib_path = "00/calib.txt", camera = "P1"
     P = np.array(numbers).reshape(3, 4)
     K = P[:, :3]
     return K, P
+
+import cv2
+
+def draw_inlier_points(img, points, inliers_mask, color=(0, 255, 0), radius=5, thickness=2):
+    """
+    Draw circles on the image for inlier points.
+    
+    Args:
+        img (np.ndarray): The image on which to draw.
+        points (np.ndarray): Nx2 array of points (pixel coordinates).
+        inliers_mask (np.ndarray): Boolean mask (N,) indicating which points are inliers.
+        color (tuple): Color for the circles (B, G, R).
+        radius (int): Radius of the circles.
+        thickness (int): Thickness of the circle border.
+    
+    Returns:
+        img_out (np.ndarray): The image with drawn circles.
+    """
+    img_out = img.copy()
+    img_out = cv2.cvtColor(img_out, cv2.COLOR_GRAY2BGR) if len(img.shape) == 2 else img_out
+    for pt, inlier in zip(points, inliers_mask):
+        if inlier:
+            x, y = int(pt[0]), int(pt[1])
+            cv2.circle(img_out, (x, y), radius, color, thickness)
+    return img_out
     
 if __name__ == "__main__":    
     K, P = extract_intrinsic_parameters("00/calib.txt")
