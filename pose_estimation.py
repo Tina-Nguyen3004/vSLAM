@@ -191,7 +191,7 @@ def triangulate_for_points(P1, P2, pts1, pts2):
         points_3D[i] = X
     return points_3D.T
 
-def recoverPose(E, pts1, pts2, K):
+def recover_pose(E, pts1, pts2, K):
     """
     Recover the relative camera pose from the essential matrix.
     
@@ -243,11 +243,10 @@ def recoverPose(E, pts1, pts2, K):
         # Triangulate points
         points_3D = triangulate_for_points(P1, P2, pts1, pts2)
         pos_dep1 = np.sum(points_3D[2] > 0)
-        print("pts3d_cam1", pos_dep1)
+        
         # For camera 2, we need to check the sign of the Z coordinate
         pts3d_cam2 = R_candidate @ points_3D[:3] + t_candidate.reshape(-1, 1)
         pos_dep2 = np.sum(pts3d_cam2[2] > 0)
-        print("pts3d_cam2", pos_dep2)
 
         inliner_count = min(pos_dep1, pos_dep2)
         if inliner_count > best_inliner_count:
@@ -277,7 +276,7 @@ if __name__ == "__main__":
     pts2 = np.array([kp_left[m.trainIdx].pt for m in matches])
     E, best_inlier_mask, current_iteration = apply_ransac_eight_point(pts1, pts2, K)
 
-    R, t = recoverPose(E, pts1, pts2, K)
+    R, t = recover_pose(E, pts1, pts2, K)
     print("R", R)
     print("t", t)
     pts1 = pts1.astype(np.float32)

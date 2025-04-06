@@ -22,7 +22,7 @@ def match_features(dp1, dp2, ratio=0.75):
     return good_matches
 
 
-def triangulate_points(kp_left, kp_right, matches, file_calib_path = "00/calib.txt"):
+def triangulate_for_keypoints(kp_left, kp_right, matches, file_calib_path = "00/calib.txt"):
     """
     Triangulate points from matched keypoints.
     Args:
@@ -86,7 +86,7 @@ def process_stereo(file_path, frame_index=0):
     matches = match_features(dp_left, dp_right)
     # Triangulate points
     calib_file = os.path.join(file_path, "calib.txt")
-    pts_3d = triangulate_points(kp_left, kp_right, matches, calib_file)
+    pts_3d = triangulate_for_keypoints(kp_left, kp_right, matches, calib_file)
     
     # Prepare points for tracking: left images 
     prev_pts = np.float32([kp_left[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
