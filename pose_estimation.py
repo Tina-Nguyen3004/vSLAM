@@ -284,17 +284,4 @@ if __name__ == "__main__":
     _, R_cv, t_cv, mask = cv2.recoverPose(E, pts1, pts2, K)
     print("OpenCV R", R_cv)
     print("OpenCV t", t_cv)
-    # E_cv, mask_cv = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, threshold=1.0)
-    # print("OpenCV Essential Matrix:\n", E_cv, np.sum(mask_cv))
     
-    # # img_matches = draw_matches(img_left_prev, kp_left_prev, img_left_curr, kp_left, matches, 40)
-    # img_left_curr = draw_inlier_points(img_left_curr, pts2, mask_cv)
-    # img_left_prev = draw_inlier_points(img_left_prev, pts1, mask_cv)
-    
-    # # Display the images
-    # # cv2.imshow("Matches", img_matches)
-    # # cv2.waitKey(0)
-    # cv2.imshow("Inliers", img_left_curr)
-    # cv2.imshow("Inliers Previous", img_left_prev)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
