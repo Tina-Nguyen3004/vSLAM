@@ -94,18 +94,17 @@ def sampson_distance(F, pt1, pt2):
         return np.inf
     return num / demon
 
-
-def apply_ransac_eight_point(pts1, pts2, K, threshold=5.0, desired_confidence=0.80, max_iterations=1000):
+def apply_ransac_eight_point(pts1, pts2, K, threshold=5.0, desired_confidence=0.80, max_iterations=100):
     """
     Custom RANSAC implementation to estimate the essential matrix.
-    This function dynamically adjusts the number of iterations based on the desired confidence.
+    This version uses vectorized computation for the error calculation so as to be faster.
     
     Args:
         pts1 (np.ndarray): Nx2 points from the first image.
         pts2 (np.ndarray): Nx2 points from the second image.
         K (np.ndarray): 3x3 camera intrinsic matrix.
         threshold (float): Distance threshold for inliers.
-        desired_confidence (float): Desired confidence (e.g., 0.99).
+        desired_confidence (float): Desired confidence (unused in this variant).
         max_iterations (int): Maximum number of iterations to run.
         
     Returns:
@@ -120,7 +119,11 @@ def apply_ransac_eight_point(pts1, pts2, K, threshold=5.0, desired_confidence=0.
     n = 8  # number of points per sample
 
     current_iteration = 0
-    required_iterations = max_iterations  # start with maximum iterations
+    required_iterations = max_iterations  # Use fixed number of iterations
+
+    # Precompute homogeneous coordinates for all points
+    pts1_h = np.hstack((pts1, np.ones((num_points, 1))))
+    pts2_h = np.hstack((pts2, np.ones((num_points, 1))))
 
     while current_iteration < required_iterations:
         current_iteration += 1
@@ -128,31 +131,29 @@ def apply_ransac_eight_point(pts1, pts2, K, threshold=5.0, desired_confidence=0.
         pts1_sample = pts1[sample_indices]
         pts2_sample = pts2[sample_indices]
         E_candidate = compute_essential_matrix(pts1_sample, pts2_sample, K)
-        
-        errors = []
-        for i in range(num_points):
-            x1 = np.array([pts1[i, 0], pts1[i, 1], 1])
-            x2 = np.array([pts2[i, 0], pts2[i, 1], 1])
-            error = sampson_distance(E_candidate, x1, x2)
-            errors.append(error)
-        errors = np.array(errors)
+
+        # Vectorized computation of the Sampson error for all points:
+        # Compute E_candidate @ pts1_h^T (shape: [3, num_points])
+        Fx1 = E_candidate @ pts1_h.T  
+        # Compute E_candidate^T @ pts2_h^T (shape: [3, num_points])
+        Ftx2 = E_candidate.T @ pts2_h.T  
+        # Compute the numerator: for each point, (x2^T * E * x1)^2.
+        numerator = np.sum(pts2_h * (E_candidate @ pts1_h.T).T, axis=1) ** 2
+        # Compute the denominator: (Fx1[0]^2 + Fx1[1]^2 + Ftx2[0]^2 + Ftx2[1]^2)
+        denominator = Fx1[0, :]**2 + Fx1[1, :]**2 + Ftx2[0, :]**2 + Ftx2[1, :]**2
+        # Avoid division by zero by substituting tiny values.
+        denominator[denominator == 0] = 1e-6
+        errors = numerator / denominator
+
         inlier_mask = errors < threshold
         inlier_count = np.sum(inlier_mask)
+        
         if inlier_count > best_inlier_count:
             best_inlier_count = inlier_count
             best_E = E_candidate
             best_inlier_mask = inlier_mask
-            
-            # Update the required iterations based on current inlier ratio
-            w = best_inlier_count / num_points
-            # Avoid division by zero or log(0)
-            if w > 0:
-                required_iterations = min(
-                    max_iterations, 
-                    int(math.ceil(math.log(1 - desired_confidence) / math.log(1 - w**n)))
-                )
-                
-    # Refine the essential matrix using all inliers if possible
+
+    # Refine the essential matrix using all inliers if enough points are present.
     if best_inlier_mask is not None and best_inlier_count > n:
         inlier_pts1 = pts1[best_inlier_mask]
         inlier_pts2 = pts2[best_inlier_mask]
