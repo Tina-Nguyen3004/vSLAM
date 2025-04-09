@@ -198,7 +198,7 @@ def main():
     frames_since_reinit = 0
     
     # Main processing loop.
-    for frame_idx in range(1, total_frames):
+    for frame_idx in range(1, round(total_frames/3)):
         # Load the current left image.
         img_path = os.path.join(left_folder, image_files[frame_idx])
         img_left = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
