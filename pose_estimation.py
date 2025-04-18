@@ -1,6 +1,8 @@
 from feature_matching import *
 
 import numpy as np
+import numpy.linalg as la
+
 import cv2
 import math
 
@@ -83,45 +85,43 @@ def sampson_distance(F, pt1, pt2):
     Returns:
         distance (float): The Sampson distance.
     """
-    # Compute the numberator
     num = (pt2.T @ F @ pt1) ** 2
-    # Compute the denominator
     Fx1 = F @ pt1
-    Fx2 = F.T @ pt2
-    demon = Fx1[0] ** 2 + Fx1[1] ** 2 + Fx2[0] ** 2 + Fx2[1] ** 2
-    # Avoid division by zero
-    if demon == 0:
+    Ftx2 = F.T @ pt2
+    denom = Fx1[0]**2 + Fx1[1]**2 + Ftx2[0]**2 + Ftx2[1]**2
+    if denom < 1e-6:
         return np.inf
-    return num / demon
+    return float(num / denom)
 
-def apply_ransac_eight_point(pts1, pts2, K, threshold=5.0, desired_confidence=0.80, max_iterations=100):
+def apply_ransac_eight_point(pts1, pts2, K, threshold=5.0, desired_confidence=0.90, max_iterations=1000):
     """
-    Custom RANSAC implementation to estimate the essential matrix.
-    This version uses vectorized computation for the error calculation so as to be faster.
+    Custom RANSAC implementation to estimate the essential matrix using unnormalized points.
+    This version uses vectorized error computation and dynamically adjusts the number of iterations,
+    similar in spirit to OpenCV’s approach.
     
     Args:
-        pts1 (np.ndarray): Nx2 points from the first image.
-        pts2 (np.ndarray): Nx2 points from the second image.
+        pts1 (np.ndarray): Nx2 raw points from the first image.
+        pts2 (np.ndarray): Nx2 raw points from the second image.
         K (np.ndarray): 3x3 camera intrinsic matrix.
-        threshold (float): Distance threshold for inliers.
-        desired_confidence (float): Desired confidence (unused in this variant).
-        max_iterations (int): Maximum number of iterations to run.
+        threshold (float): Inlier threshold for the Sampson distance.
+        desired_confidence (float): Desired overall confidence (e.g., 0.99).
+        max_iterations (int): Maximum number of iterations.
         
     Returns:
-        best_E (np.ndarray): Best estimated essential matrix.
-        best_inlier_mask (np.ndarray): Boolean mask of inliers.
-        actual_iterations (int): The number of iterations that were actually run.
+        best_E (np.ndarray): The best estimated 3x3 essential matrix.
+        best_inlier_mask (np.ndarray): Boolean mask (length N) of inliers.
+        actual_iterations (int): The number of iterations run.
     """
     best_E = None
     best_inlier_mask = None
-    best_inlier_count = -1
+    best_inlier_count = 0
     num_points = pts1.shape[0]
-    n = 8  # number of points per sample
+    n = 8  # sample size
 
     current_iteration = 0
-    required_iterations = max_iterations  # Use fixed number of iterations
+    required_iterations = max_iterations
 
-    # Precompute homogeneous coordinates for all points
+    # Precompute homogeneous coordinates for all points.
     pts1_h = np.hstack((pts1, np.ones((num_points, 1))))
     pts2_h = np.hstack((pts2, np.ones((num_points, 1))))
 
@@ -131,29 +131,35 @@ def apply_ransac_eight_point(pts1, pts2, K, threshold=5.0, desired_confidence=0.
         pts1_sample = pts1[sample_indices]
         pts2_sample = pts2[sample_indices]
         E_candidate = compute_essential_matrix(pts1_sample, pts2_sample, K)
-
-        # Vectorized computation of the Sampson error for all points:
-        # Compute E_candidate @ pts1_h^T (shape: [3, num_points])
-        Fx1 = E_candidate @ pts1_h.T  
-        # Compute E_candidate^T @ pts2_h^T (shape: [3, num_points])
-        Ftx2 = E_candidate.T @ pts2_h.T  
-        # Compute the numerator: for each point, (x2^T * E * x1)^2.
+        
+        # Vectorized computation of Sampson error:
+        Fx1 = E_candidate @ pts1_h.T  # Shape: [3, num_points]
+        Ftx2 = E_candidate.T @ pts2_h.T  # Shape: [3, num_points]
         numerator = np.sum(pts2_h * (E_candidate @ pts1_h.T).T, axis=1) ** 2
-        # Compute the denominator: (Fx1[0]^2 + Fx1[1]^2 + Ftx2[0]^2 + Ftx2[1]^2)
         denominator = Fx1[0, :]**2 + Fx1[1, :]**2 + Ftx2[0, :]**2 + Ftx2[1, :]**2
-        # Avoid division by zero by substituting tiny values.
-        denominator[denominator == 0] = 1e-6
+        denominator[denominator < 1e-6] = 1e-6
         errors = numerator / denominator
 
         inlier_mask = errors < threshold
         inlier_count = np.sum(inlier_mask)
-        
+
         if inlier_count > best_inlier_count:
             best_inlier_count = inlier_count
             best_E = E_candidate
             best_inlier_mask = inlier_mask
 
-    # Refine the essential matrix using all inliers if enough points are present.
+            if best_inlier_count > 0:
+                w = best_inlier_count / float(num_points)
+                # If nearly all points are inliers, break early.
+                if w ** n >= 0:
+                    required_iterations = current_iteration
+                else:
+                    print(math.log(1 - w ** n), w, n)
+                    required_iterations = min(max_iterations,
+                        int(math.ceil(math.log(1 - desired_confidence) / math.log(1 - w ** n))))
+            # Otherwise (best_inlier_count==0), leave required_iterations unchanged.
+    
+    # Optionally, refine the essential matrix using all inliers.
     if best_inlier_mask is not None and best_inlier_count > n:
         inlier_pts1 = pts1[best_inlier_mask]
         inlier_pts2 = pts2[best_inlier_mask]
@@ -256,33 +262,74 @@ def recover_pose(E, pts1, pts2, K):
         
     return best_R, best_t
 
+def main():
+    # Synthetic example:
+    np.random.seed(42)
+    num_points = 50
+    pts1 = np.random.uniform(low=0, high=640, size=(num_points, 2))
+    
+    # Known transformation: small rotation and translation.
+    angle = np.deg2rad(5)
+    R_true = np.array([[math.cos(angle), -math.sin(angle), 0],
+                       [math.sin(angle),  math.cos(angle), 0],
+                       [0,                0,               1]])
+    t_true = np.array([[10], [5], [1]])
+    
+    # Define camera intrinsic matrix K.
+    K = np.array([[700,   0, 320],
+                  [  0, 700, 240],
+                  [  0,   0,   1]], dtype=float)
+    
+    # Generate pts2 by applying the transformation to pts1 (simulate a pure 2D reprojection).
+    pts2 = []
+    for pt in pts1:
+        pt_h = np.array([[pt[0]], [pt[1]], [1]])
+        pt2_h = R_true @ pt_h + t_true
+        pt2 = (pt2_h / pt2_h[2]).flatten()[:2]
+        pts2.append(pt2)
+    pts2 = np.array(pts2)
+    
+    # Add noise to pts2.
+    pts2 += np.random.normal(scale=1.0, size=pts2.shape)
+    
+    # Run custom RANSAC eight-point algorithm.
+    E_custom, mask_custom, iters_custom = apply_ransac_eight_point(pts1, pts2, K,
+                                                                   threshold=5.0,
+                                                                   desired_confidence=0.90,
+                                                                   max_iterations=1000)
+    print("Custom RANSAC (eight-point) estimated essential matrix:")
+    print(E_custom)
+    print("Custom inlier mask:")
+    print(mask_custom)
+    print("Iterations (custom):", iters_custom)
+    
+    # Use OpenCV's findEssentialMat.
+    pts1_cv = pts1.astype(np.float32)
+    pts2_cv = pts2.astype(np.float32)
+    E_cv, mask_cv = cv2.findEssentialMat(pts1_cv, pts2_cv, K, method=cv2.RANSAC,
+                                          prob=0.999, threshold=1.0)
+    print("\nOpenCV findEssentialMat estimated essential matrix:")
+    print(E_cv)
+    print("OpenCV inlier mask:")
+    print(mask_cv.ravel())
+    
+    # Optional: Recover pose from one of the estimates.
+    R_custom, t_custom = recover_pose(E_custom, pts1, pts2, K)
+    R_cv, t_cv = cv2.recoverPose(E_cv, pts1_cv, pts2_cv, K)[1:3]
+    print("\nRecovered pose (custom):")
+    print("Rotation:\n", R_custom)
+    print("Translation:\n", t_custom)
+    print("\nRecovered pose (OpenCV):")
+    print("Rotation:\n", R_cv)
+    print("Translation:\n", t_cv)
+    
+    # Compare the two essential matrices (note: defined up to scale).
+    E_custom_norm = E_custom / la.norm(E_custom)
+    E_cv_norm = E_cv / la.norm(E_cv)
+    diff = la.norm(E_custom_norm - E_cv_norm)
+    print("\nFrobenius norm difference between normalized matrices:")
+    print(diff)
+    
 if __name__ == "__main__":
-    dataset_path = "00"
-    frame_index = 12
-    
-    # Initialize the first 
-    img_left_prev, _, _ = process_stereo(dataset_path, frame_index)
-    img_left_curr, _, _ = process_stereo(dataset_path, frame_index + 1)
-    
-    kp_left_prev, dp_left_prev = featureExtractor(img_left_prev)
-    kp_left, dp_left = featureExtractor(img_left_curr)
-    
-    points1 = np.array([kp.pt for kp in kp_left_prev])
-    points2 = np.array([kp.pt for kp in kp_left])
-    intrinsic_path = os.path.join(dataset_path, "calib.txt")
-    K, _ = extract_intrinsic_parameters(intrinsic_path, "P0")
-    
-    matches = match_features(dp_left_prev, dp_left)
-    pts1 = np.array([kp_left_prev[m.queryIdx].pt for m in matches])
-    pts2 = np.array([kp_left[m.trainIdx].pt for m in matches])
-    E, best_inlier_mask, current_iteration = apply_ransac_eight_point(pts1, pts2, K)
-
-    R, t = recover_pose(E, pts1, pts2, K)
-    print("R", R)
-    print("t", t)
-    pts1 = pts1.astype(np.float32)
-    pts2 = pts2.astype(np.float32)
-    _, R_cv, t_cv, mask = cv2.recoverPose(E, pts1, pts2, K)
-    print("OpenCV R", R_cv)
-    print("OpenCV t", t_cv)
+    main()
     

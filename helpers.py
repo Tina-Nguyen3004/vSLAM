@@ -37,8 +37,6 @@ def extract_intrinsic_parameters(file_calib_path = "00/calib.txt", camera = "P1"
     K = P[:, :3]
     return K, P
 
-import cv2
-
 def draw_inlier_points(img, points, inliers_mask, color=(0, 255, 0), radius=5, thickness=2):
     """
     Draw circles on the image for inlier points.
@@ -61,6 +59,15 @@ def draw_inlier_points(img, points, inliers_mask, color=(0, 255, 0), radius=5, t
             x, y = int(pt[0]), int(pt[1])
             cv2.circle(img_out, (x, y), radius, color, thickness)
     return img_out
+
+def compute_projection_matrix(K, pose):
+    """
+    Compute the camera projection matrix P = K * [R|t].
+    """
+    R_mat = pose[:3, :3]
+    t = pose[:3, 3].reshape(3, 1)
+    Rt = np.hstack((R_mat, t))
+    return K @ Rt
     
 if __name__ == "__main__":    
     K, P = extract_intrinsic_parameters("00/calib.txt")

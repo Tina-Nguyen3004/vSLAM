@@ -1,26 +1,13 @@
 from feature_extractor import *
 from helpers import *
 
-# -----------------------------
-# Stereo functions (for initialization and update)
-# -----------------------------
-def match_features(dp1, dp2, ratio=0.75):
-    """
-    Match features between two images using BFMatcher and Lowe's ratio test.
-    Args:
-        dp1 (numpy.ndarray): Descriptors of the first image.
-        dp2 (numpy.ndarray)): Descriptors of the second image.
-        ratio (float): Ratio for Lowe's ratio test.
-    Returns:
-        matches: List of good matches.
-    """
-    # Create BFMatcher object
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
-    knn_matches = bf.knnMatch(dp1[1], dp2[1], k=2)
-    # Apply Lowe's ratio test
-    good_matches = [m for m, n in knn_matches if m.distance < ratio * n.distance]
-    return good_matches
-
+# ------------------ HELPER FUNCTIONS ------------------
+def match_features(des1, des2):
+    """Match descriptors between two keyframes using BFMatcher."""
+    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+    matches = bf.match(des1, des2)
+    matches = sorted(matches, key=lambda x: x.distance)
+    return matches
 
 def triangulate_for_keypoints(kp_left, kp_right, matches, file_calib_path = "00/calib.txt"):
     """
