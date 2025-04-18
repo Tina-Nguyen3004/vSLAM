@@ -14,6 +14,7 @@ from helpers import *
 from loop_closure import *
 from bundle_adjustment import *
 from pose_estimation import *
+from display import *
 
 
 def update_pose_estimate(good_prev, good_curr, K, current_pose):
@@ -264,21 +265,41 @@ def main():
     for constraint in loop_closure_constraints:
         print(constraint)
 
-    traj_array = np.array(trajectory)           # shape (N,3)
+    est_traj = np.vstack(trajectory)              # (N,3)
+    gt_poses = np.stack(load_kitti_poses(os.path.join("00","00.txt")), 0) # (N,4,4)
+    gt_traj  = gt_poses[:len(est_traj), :3, 3]     # (N,3)
+    s, R_sim, t_sim = compute_similarity_transform(est_traj, gt_traj, with_scale=False)
+    est_aligned = (s * (R_sim @ est_traj.T)).T + t_sim
+    errors = np.linalg.norm(gt_traj - est_aligned, axis=1)
+
+    # Print per-frame error
+    for i, e in enumerate(errors):
+        print(f"Frame {i:3d}: error = {e:.3f} m")
+
+    # Save CSV of frame-by-frame
+    idxs = np.arange(len(errors))
     np.savetxt(
-        "camera_trajectory.csv",
-        traj_array[:, [0,2]],
+        "frame_by_frame_errors.csv",
+        np.column_stack((idxs, errors)),
         delimiter=",",
-        header="x,z",
+        header="frame,error_m",
         comments=""
     )
 
+    # Plot error over frames
+    plt.figure()
+    plt.plot(idxs, errors, '-o', markersize=3)
+    plt.xlabel("Frame index")
+    plt.ylabel("Error (m)")
+    plt.title("Frame-by-Frame Absolute Trajectory Error")
+    plt.grid(True)
+    plt.savefig("frame_by_frame_error.png", dpi=200)
+    plt.close()
+
+    # Save full trajectory outputs
+    traj_array = np.array(trajectory)
+    np.savetxt("camera_trajectory.csv", traj_array[:, [0,2]], delimiter=",")
     fig_traj.savefig("camera_trajectory.png", dpi=300)
-
-    plt.ioff()
-    plt.show()
-
-    display_pose_graph(pose_graph, pause_time=1.0)
     plt.ioff()
     plt.show()
 

@@ -68,6 +68,26 @@ def compute_projection_matrix(K, pose):
     t = pose[:3, 3].reshape(3, 1)
     Rt = np.hstack((R_mat, t))
     return K @ Rt
+
+def compute_similarity_transform(A, B, with_scale=False):
+    assert A.shape == B.shape
+    m = A.shape[0]
+    mu_A = A.mean(axis=0)
+    mu_B = B.mean(axis=0)
+    AA = A - mu_A
+    BB = B - mu_B
+    H = AA.T @ BB / m
+    U, S, Vt = np.linalg.svd(H)
+    R = Vt.T @ U.T
+    if np.linalg.det(R) < 0:
+        Vt[-1, :] *= -1
+        R = Vt.T @ U.T
+    s = 1.0
+    if with_scale:
+        var_A = (AA**2).sum() / m
+        s = (S.sum() / var_A)
+    t = mu_B - s * R @ mu_A
+    return s, R, t
     
 if __name__ == "__main__":    
     K, P = extract_intrinsic_parameters("00/calib.txt")
