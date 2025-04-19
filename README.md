@@ -7,6 +7,8 @@ This repository implements a real‑time monocular visual odometry (VO) pipeline
 pip install -r requirements.txt
 ```
 
+---
+
 ## Usage
 
 Run the main pipeline with:
@@ -18,17 +20,17 @@ python main.py
 or
 
 ```bash
-python main.py \
-  --dataset_path 00 \
-  --path_folder image_0 \
+python main.py 
+  --dataset_path 00 
+  --path_folder image_0 
   --ground_truth 00.txt
+  --left False
 ```
 
 - `--dataset_path`: path to the KITTI sequence folder (e.g., `00`)
 - `--path_folder`: image subfolder (e.g., `image_0` for left camera)
 - `--ground_truth`: filename of the poses file (e.g., `00.txt`)
-
----
+- `--left`: whether the images used are left or right foler (`True` for left images, `False` for right images)
 
 ---
 
@@ -49,76 +51,14 @@ Additionally, during execution you will see:
 
 Press `q` in any OpenCV window to exit early.
 
-
-## Prerequisites
-
-- Python 3.7 or higher
-- [KITTI Odometry dataset](http://www.cvlibs.net/datasets/kitti/eval_odometry.php) (e.g., sequence `00`)
-
-### Python dependencies
-You can install the required Python packages via:
-
-```bash
-pip install opencv-python numpy networkx matplotlib scikit-learn
-```
-
-Alternatively, create a `requirements.txt` file:
-
-```text
-opencv-python
-numpy
-networkx
-matplotlib
-scikit-learn
-```
-
-and run:
-
-```bash
-pip install -r requirements.txt
-```
-
 ---
 
-## Repository Structure
-
-```text
-.
-├── main.py                # Entry point for VO + loop detection
-├── feature_extractor.py   # ORB detection and descriptor extraction
-├── feature_matching.py    # Stereo matching & helper routines
-├── pose_estimation.py     # Essential matrix computation & pose recovery
-├── loop_closure.py        # BoW vocabulary + loop detection functions
-├── bundle_adjustment.py   # (optional) pose-graph optimization stubs
-├── helpers.py             # Utility functions (file I/O, calibration parsing)
-├── display.py             # Visualization routines
-└── README.md              # This file
-```
-
----
+## Acknowledgement
 
 
-
-### Optional flags
-
-You can adjust keyframe interval and other parameters by editing the constants in `main.py`:
-
-- **Keyframe interval**: change `keyframe_threshold` from `5` to another integer
-- **Descriptor limit**: adjust `nfeatures` in `feature_extractor.py`
-- **Loop-similarity threshold**: modify `similarity_threshold` in `loop_closure.py`
-
-
----
-
-## Tips & Troubleshooting
-
-- Ensure the KITTI folder structure remains intact (`00/image_0`, `00/calib.txt`, `00/00.txt`).
-- If you encounter file-not-found errors, double-check the `--dataset_path` and `--path_folder` arguments.
-- Increase the Python recursion limit or buffer sizes if processing very long sequences.
 
 ---
 
 ## License
 
 This code is released for academic use under the MIT License. Feel free to cite our work if you find it useful!
-
