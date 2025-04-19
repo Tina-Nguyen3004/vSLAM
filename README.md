@@ -1,6 +1,6 @@
 # Monocular Visual Odometry with Loop Detection
 
-This repository implements a real‑time monocular visual odometry (VO) pipeline with lightweight loop detection, tested on the KITTI dataset. Due to overwhelming size of the dataset, only the left folder of the sequence of the dataset is available in the repo.
+This repository implements a real‑time monocular visual odometry (VO) pipeline with lightweight loop detection, tested on the KITTI dataset. Due to overwhelming size of the dataset, only the left folder of the sequence `00` of the dataset is available in the repo.
 
 ## Prerequisites:
 ```bash
