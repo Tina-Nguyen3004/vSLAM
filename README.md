@@ -55,7 +55,7 @@ Press `q` in any OpenCV window to exit early.
 
 ## Acknowledgement
 
-
+I would like to express the greatest gratification towards the amazing TAs and the professor teaching CMPUT 428 winter 2025.
 
 ---
 
