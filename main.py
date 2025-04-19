@@ -6,6 +6,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import math
 from sklearn.cluster import MiniBatchKMeans
+import argparse
 
 # Import functions from your modules.
 from feature_extractor import featureExtractor
@@ -53,7 +54,7 @@ def update_pose_estimate(good_prev, good_curr, K, current_pose):
     new_pose = current_pose @ T_rel
     return new_pose
 
-def initialize_monocular(dataset_path, init_frame=0):
+def initialize_monocular(dataset_path, init_frame=0, folder_path="image_0"):
     """
     Initialize monocular odometry using the left image only.
     
@@ -66,11 +67,11 @@ def initialize_monocular(dataset_path, init_frame=0):
         prev_pts (np.ndarray): 2D points (for tracking) from the left image.
         current_pose (np.ndarray): Initial global pose as a 4x4 transformation (identity).
     """
-    left_folder = os.path.join(dataset_path, "image_0")
-    image_files = sort_files(os.listdir(left_folder))
+    folder = os.path.join(dataset_path, folder_path)
+    image_files = sort_files(os.listdir(folder))
     if init_frame >= len(image_files):
         raise IndexError("init_frame is out of range")
-    img_path = os.path.join(left_folder, image_files[init_frame])
+    img_path = os.path.join(folder, image_files[init_frame])
     img_left = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     if img_left is None:
         raise FileNotFoundError("Left image not found at " + img_path)
@@ -127,26 +128,29 @@ def display_pose_graph(pose_graph, pause_time=0.1):
     plt.draw()
     plt.pause(pause_time)
 
-def main():
+def main(dataset_path, path_folder, groundtruth):
     # Enable interactive plotting.
     plt.ion()
     fig_traj, ax_traj = plt.subplots(num="Camera Trajectory")
     
     # Define dataset folder.
-    dataset_path = "00"
-    left_folder = os.path.join(dataset_path, "image_0")
-    image_files = sort_files(os.listdir(left_folder))
+    folder = os.path.join(dataset_path, path_folder)
+    image_files = sort_files(os.listdir(folder))
     total_frames = len(image_files)
     
     # Load calibration and compute intrinsic matrix from left camera ("P0").
     calib_file = os.path.join(dataset_path, "calib.txt")
-    K, _ = extract_intrinsic_parameters(calib_file, "P0")
+    if "0" not in path_folder:
+        projection_matrix = "P1"
+    else:
+        projection_matrix = "P0"
+    K, _ = extract_intrinsic_parameters(calib_file, projection_matrix)
     
     # (Optional) Build vocabulary from the first 20 frames for keyframe-based processing.
     descriptors_list = []
     num_train = min(20, total_frames)
     for i in range(num_train):
-        img_path = os.path.join(left_folder, image_files[i])
+        img_path = os.path.join(folder, image_files[i])
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
@@ -165,7 +169,7 @@ def main():
     loop_closure_constraints = []  # For storing loop closure info (if any).
     
     # Initialize monocular odometry.
-    img_left_prev, prev_pts, current_pose = initialize_monocular(dataset_path, init_frame=0)
+    img_left_prev, prev_pts, current_pose = initialize_monocular(dataset_path, init_frame=0, folder_path=path_folder)
     
     # Save the initial camera translation (for trajectory visualization).
     trajectory = [current_pose[:3, 3].copy()]
@@ -186,7 +190,7 @@ def main():
     # Main processing loop.
     for frame_idx in range(1, total_frames):
         # Load the current left image.
-        img_path = os.path.join(left_folder, image_files[frame_idx])
+        img_path = os.path.join(folder, image_files[frame_idx])
         img_left = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
         if img_left is None:
             continue
@@ -235,7 +239,7 @@ def main():
                 old_match_idx = old_match_keyframe * keyframe_threshold
                 print(f"Loop closure detected: keyframe {keyframe_counter} with frame id {frame_idx} matches keyframe {old_match_keyframe} with frame id {old_match_idx}")
                 # draw the pair of keyframes with frame ids
-                img_match = cv2.imread(os.path.join(left_folder, image_files[old_match_idx]), cv2.IMREAD_GRAYSCALE)
+                img_match = cv2.imread(os.path.join(folder, image_files[old_match_idx]), cv2.IMREAD_GRAYSCALE)
                 pair = np.hstack((img_left, img_match))
                 window_name = f"Loop Closure Pair: frame ids {frame_idx} - {old_match_idx}"
                 cv2.imshow(window_name, pair)
@@ -266,7 +270,7 @@ def main():
         print(constraint)
 
     est_traj = np.vstack(trajectory)              # (N,3)
-    gt_poses = np.stack(load_kitti_poses(os.path.join("00","00.txt")), 0) # (N,4,4)
+    gt_poses = np.stack(load_kitti_poses(os.path.join(dataset_path, groundtruth)), 0) # (N,4,4)
     gt_traj  = gt_poses[:len(est_traj), :3, 3]     # (N,3)
     s, R_sim, t_sim = compute_similarity_transform(est_traj, gt_traj, with_scale=False)
     est_aligned = (s * (R_sim @ est_traj.T)).T + t_sim
@@ -304,4 +308,10 @@ def main():
     plt.show()
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Monocular Visual Odometry")
+    parser.add_argument("--dataset_path", type=str, default="00", help="Path to the KITTI dataset folder (e.g., '00').")
+    parser.add_argument("--path_folder", type=str, default="image_0", help="Path to the image folder (e.g., 'image_0').")
+    parser.add_argument("--ground_truth", type=str, default="00.txt", help="Path to the ground truth file (e.g., '00.txt').")
+    args = parser.parse_args()
+    
+    main(dataset_path=args.dataset_path, path_folder=args.path_folder, groundtruth=args.ground_truth)
