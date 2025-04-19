@@ -128,7 +128,7 @@ def display_pose_graph(pose_graph, pause_time=0.1):
     plt.draw()
     plt.pause(pause_time)
 
-def main(dataset_path, path_folder, groundtruth):
+def main(dataset_path, path_folder, groundtruth, is_left):
     # Enable interactive plotting.
     plt.ion()
     fig_traj, ax_traj = plt.subplots(num="Camera Trajectory")
@@ -140,7 +140,7 @@ def main(dataset_path, path_folder, groundtruth):
     
     # Load calibration and compute intrinsic matrix from left camera ("P0").
     calib_file = os.path.join(dataset_path, "calib.txt")
-    if "0" not in path_folder:
+    if not is_left:
         projection_matrix = "P1"
     else:
         projection_matrix = "P0"
@@ -312,6 +312,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_path", type=str, default="00", help="Path to the KITTI dataset folder (e.g., '00').")
     parser.add_argument("--path_folder", type=str, default="image_0", help="Path to the image folder (e.g., 'image_0').")
     parser.add_argument("--ground_truth", type=str, default="00.txt", help="Path to the ground truth file (e.g., '00.txt').")
+    parser.add_argument("--left", action="store_false", help="Use left camera images.")
     args = parser.parse_args()
     
-    main(dataset_path=args.dataset_path, path_folder=args.path_folder, groundtruth=args.ground_truth)
+    main(dataset_path=args.dataset_path, path_folder=args.path_folder, groundtruth=args.ground_truth, is_left=args.left)
